@@ -5,7 +5,7 @@
 #   bash ~/get_weights.sh
 #
 # 说明：openpi 的权重存放在 Google Cloud Storage 公开桶 gs://openpi-assets。
-#       国内云服务器访问可能很慢或直接不通，脚本失败就换路线 B（见 README第 10 步）。
+#       国内云服务器访问可能很慢或直接不通，脚本失败就换路线 B（见 README 第 10 步）。
 set -e
 
 PY="${PY:-$HOME/miniconda3/envs/openpi/bin/python}"
@@ -13,7 +13,7 @@ CKPT_DIR="${CKPT_DIR:-$HOME/openpi/checkpoints}"
 GS="$(dirname "$PY")/gsutil"
 
 if [ ! -x "$PY" ]; then
-  echo "找不到 Python：$PY —— 先做完 README第 9 步（装 conda openpi 环境）"
+  echo "找不到 Python：$PY —— 先做完 README 第 9 步（装 conda openpi 环境）"
   exit 1
 fi
 
