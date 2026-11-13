@@ -1,0 +1,12 @@
+E: Failed to fetch https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu/pool/main/p/python3-colcon-core/python3-colcon-core_0.20.0+upstream-1_all.deb  404  Not Found [IP: 101.6.15.130 443]
+E: Failed to fetch https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu/pool/main/p/python3-colcon-package-information/python3-colcon-package-information_0.4.0-100_all.deb  404  Not Found [IP: 101.6.15.130 443]
+E: Failed to fetch https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu/pool/main/p/python3-colcon-cmake/python3-colcon-cmake_0.2.29-100_all.deb  404  Not Found [IP: 101.6.15.130 443]
+E: Failed to fetch https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu/pool/main/p/python3-colcon-metadata/python3-colcon-metadata_0.2.5-100_all.deb  404  Not Found [IP: 101.6.15.130 443]
+E: Failed to fetch https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu/pool/main/p/python3-colcon-notification/python3-colcon-notification_0.3.0-100_all.deb  404  Not Found [IP: 101.6.15.130 443]
+E: Failed to fetch https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu/pool/main/p/python3-colcon-output/python3-colcon-output_0.2.13-100_all.deb  404  Not Found [IP: 101.6.15.130 443]
+E: Failed to fetch https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu/pool/main/p/python3-colcon-powershell/python3-colcon-powershell_0.4.0-100_all.deb  404  Not Found [IP: 101.6.15.130 443]
+E: Failed to fetch https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu/pool/main/p/python3-rospkg-modules/python3-rospkg-modules_1.6.0-1_all.deb  404  Not Found [IP: 101.6.15.130 443]
+E: Failed to fetch https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu/pool/main/p/python3-rosdistro-modules/python3-rosdistro-modules_1.0.1-1_all.deb  404  Not Found [IP: 101.6.15.130 443]
+E: Failed to fetch https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu/pool/main/p/python3-rosdep-modules/python3-rosdep-modules_0.26.0-1_all.deb  404  Not Found [IP: 101.6.15.130 443]
+E: Failed to fetch https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu/pool/main/p/python3-rosdep/python3-rosdep_0.26.0-1_all.deb  404  Not Found [IP: 101.6.15.130 443]
+E: Unable to fetch some archives, maybe run apt-get update or try with --fix-missing?

@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <model name="target_box">
+    <pose>0 0 0.02 0 0 0</pose>
+    <link name="link">
+      <inertial>
+        <mass>0.06</mass>
+        <inertia>
+          <ixx>1.6e-05</ixx><iyy>1.6e-05</iyy><izz>1.6e-05</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+
+      <collision name="collision">
+        <geometry><box><size>0.04 0.04 0.04</size></box></geometry>
+        <surface>
+          <friction><ode><mu>1.5</mu><mu2>1.5</mu2></ode></friction>
+          <contact><ode>
+            <kp>500.0</kp>
+              <max_vel>0.01</max_vel><min_depth>0.0005</min_depth>
+              <implicit_spring_damper>true</implicit_spring_damper><kd>10.0</kd>
+          </ode></contact>
+        </surface>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.04 0.04 0.04</size></box></geometry>
+        <surface>
+          <friction><ode><mu>1.5</mu><mu2>1.5</mu2></ode></friction>
+          <contact><ode>
+            <kp>500.0</kp>
+              <max_vel>0.01</max_vel><min_depth>0.0005</min_depth>
+              <implicit_spring_damper>true</implicit_spring_damper><kd>10.0</kd>
+          </ode></contact>
+        </surface>
+        <material><ambient>0.1 0.8 0.2 1</ambient><diffuse>0.1 0.8 0.2 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+</sdf>

@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>睿尔曼 ECO65 六维力版机械臂智能抓取（VLA）整机开发方案</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --text: #1f2328;
+    --heading: #0969da;
+    --code-bg: #f6f8fa;
+    --code-text: #24292f;
+    --border: #d0d7de;
+    --quote-bg: #fff8c5;
+    --quote-border: #d4a72c;
+    --table-head: #f6f8fa;
+    --table-alt: #f8f9fa;
+    --accent: #8250df;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    line-height: 1.75;
+    font-size: 16px;
+  }
+  .page {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 48px 28px 80px;
+  }
+  header {
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 20px;
+    margin-bottom: 32px;
+  }
+  h1 {
+    color: var(--heading);
+    font-size: 30px;
+    line-height: 1.35;
+    margin: 0 0 4px;
+  }
+  h2 {
+    color: var(--heading);
+    font-size: 23px;
+    margin: 44px 0 14px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    color: #1a7f37;
+    font-size: 18px;
+    margin: 28px 0 10px;
+  }
+  p { margin: 12px 0; }
+  blockquote {
+    background: var(--quote-bg);
+    border-left: 4px solid var(--quote-border);
+    margin: 18px 0;
+    padding: 12px 18px;
+    border-radius: 0 6px 6px 0;
+    color: #5c4d00;
+  }
+  blockquote p { margin: 0; }
+  code {
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 14px;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: 18px 20px;
+    border-radius: 8px;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 13.5px;
+    line-height: 1.6;
+    margin: 16px 0;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 18px 0;
+    font-size: 14.5px;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 9px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: var(--table-head);
+    font-weight: 600;
+  }
+  tbody tr:nth-child(even) { background: var(--table-alt); }
+  ol, ul { padding-left: 26px; }
+  li { margin: 6px 0; }
+  .meta-list { list-style: none; padding-left: 0; margin: 14px 0; }
+  .meta-list li {
+    background: var(--code-bg);
+    padding: 8px 14px;
+    border-radius: 6px;
+    border-left: 4px solid var(--heading);
+    margin: 8px 0;
+  }
+  .footnote {
+    margin-top: 50px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+    color: #656d76;
+    font-size: 14px;
+  }
+  .tag {
+    display: inline-block;
+    background: #ddf4ff;
+    color: #0969da;
+    border-radius: 12px;
+    padding: 1px 10px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-right: 4px;
+  }
+  hr { border: none; border-top: 1px solid var(--border); margin: 30px 0; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <h1>睿尔曼 ECO65 六维力版机械臂智能抓取（VLA）整机开发方案</h1>
+  <ul class="meta-list">
+    <li><strong>目标</strong>：一台能「听懂话 + 看场景 + 自主抓取」的机械臂整机。</li>
+    <li><strong>硬件</strong>：睿尔曼（RealMan）ECO65-6FB 六轴机械臂（六维力版）+ 二指/V 型电动夹爪 + 四目深度相机。</li>
+    <li><strong>软件</strong>：Ubuntu 20.04 + ROS2 Foxy + 官方 <code>ros2_rm_robot</code> 包 + OpenPI VLA 模型。</li>
+    <li><strong>控制</strong>：<strong>底层 PID 精确执行 + 高层 OpenPI VLA 决策</strong> 双层架构。</li>
+  </ul>
+</header>
+
+<hr>
+
+<h2>一、一句话说清整体思路</h2>
+
+<p>整机 = 把大工程拆成「官方包（复用）+ 自定义包（新增）」两类，接口先行、仿真优先、一个模块一个模块点亮。</p>
+
+<p><strong>关键变化</strong>：相比上一版「通用 6 关节」，这次机械臂锁定 ECO65 六维力版、ROS 锁定 Foxy，并加入 VLA 模型。控制分两层：</p>
+
+<pre><code>高层（聪明的大脑）：OpenPI VLA —— 看图像 + 听语言指令 → 决定「手往哪动、夹爪怎么动」
+底层（听话的肌肉）：PID 控制 —— 把 VLA 的决定精确执行到位</code></pre>
+
+<blockquote><p>大白话：VLA 负责「想做什么」，PID 负责「把动作做准」。两者分工，缺一不可。</p></blockquote>
+
+<h2>二、ECO65 六维力版（ECO65-6FB）机械臂实参</h2>
+
+<h3>2.0 一句话认识这款臂</h3>
+
+<ul>
+  <li>睿尔曼 ECO 系列里的中等尺寸协作臂，<strong>六维力版在末端内置六维力传感器</strong>。</li>
+  <li>核心指标：有效负载 <strong>5 kg</strong>、工作半径 <strong>627 mm</strong>、重复定位精度 <strong>±0.05 mm</strong>、自重 <strong>7.9 kg</strong>。</li>
+</ul>
+
+<h3>2.1 六维力传感器（本版核心，抓取项目的关键）</h3>
+
+<table>
+  <thead>
+    <tr><th>指标</th><th>数值</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>量程</td><td>200 N / 7 N·m</td></tr>
+    <tr><td>精度</td><td>±0.5% FS</td></tr>
+  </tbody>
+</table>
+
+<p>对我们有什么用（后文会反复用到）：</p>
+<ol>
+  <li><strong>拖动示教</strong>：直接手拽机械臂录轨迹，是采集 VLA 示教数据最自然的方式。</li>
+  <li><strong>力控</strong>：恒力贴合、柔顺插入，抓取/放置更稳。</li>
+  <li><strong>夹爪力反馈</strong>：感知夹持力，防止夹碎或夹不住。</li>
+  <li><strong>碰撞检测</strong>：多一层安全。</li>
+</ol>
+
+<blockquote><p>注意：更换六维力末端后，必须重新标定六维力的初始力与重心（官方说明书明确要求）。</p></blockquote>
+
+<h3>2.2 关节结构（6 个全旋转关节）</h3>
+
+<table>
+  <thead>
+    <tr><th>关节</th><th>限位（弧度）</th><th>约等于（度）</th><th>最大速度</th><th>力矩上限</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>J1（基座旋转）</td><td>±3.106</td><td>±178°</td><td>3.14 rad/s（180°/s）</td><td>60 N·m</td></tr>
+    <tr><td>J2（肩）</td><td>−3.106 ~ 2.356</td><td>−178° ~ 135°</td><td>3.14 rad/s</td><td>60 N·m</td></tr>
+    <tr><td>J3（肘）</td><td>−2.792 ~ 2.53</td><td>−160° ~ 145°</td><td>3.14 rad/s</td><td>30 N·m</td></tr>
+    <tr><td>J4（腕1）</td><td>±3.106</td><td>±178°</td><td>3.14 rad/s</td><td>10 N·m</td></tr>
+    <tr><td>J5（腕2）</td><td>±3.106</td><td>±178°</td><td>3.14 rad/s</td><td>10 N·m</td></tr>
+    <tr><td>J6（腕3）</td><td>±6.28</td><td>±360°</td><td>3.14 rad/s</td><td>10 N·m</td></tr>
+  </tbody>
+</table>
+
+<blockquote>
+<p><strong>实测修正（2026-10-19 从官方 URDF 读出）</strong>：最大速度并非统一值——<strong>J1~J3 = 3.14 rad/s（180°/s），J4~J5 = 3.92 rad/s（225°/s）</strong>（J6 待确认，按说明书应为 225°/s）。</p>
+<p>力矩：URDF 里 <code>effort</code> 统一写 <strong>100 N·m</strong>（比手册的 60/30/10 粗略保守），<strong>安全限速以 URDF 为准</strong>。</p>
+<p>关节与连杆命名（写代码必须照抄）：<strong><code>joint1</code>~<code>joint6</code></strong>、<strong><code>baselink</code> → <code>Link1</code>~<code>Link6</code></strong>（无下划线，<code>Link</code> 首字母大写）。</p>
+</blockquote>
+
+<h3>2.3 连杆尺寸（URDF 关节原点，单位米）</h3>
+
+<pre><code>base → J1  0.1625（底座高度）
+J1 → J2    X −0.086
+J2 → J3    X 0.260（上臂）
+J3 → J4    X 0.240（前臂）、Z −0.0589
+J4 → J5    Y −0.110
+J5 → J6    Y 0.0795</code></pre>
+
+<h3>2.4 MDH 参数（改进 D-H，说明书提供，供运动学模块直接用）</h3>
+
+<table>
+  <thead>
+    <tr><th>i</th><th>a<sub>i−1</sub></th><th>α<sub>i−1</sub></th><th>d<sub>i</sub></th><th>零位偏移</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1</td><td>0</td><td>0</td><td>162.5 mm</td><td>0</td></tr>
+    <tr><td>2</td><td>−86 mm</td><td>−90°</td><td>0</td><td>−90°</td></tr>
+    <tr><td>3</td><td>260 mm</td><td>0</td><td>0</td><td>90°</td></tr>
+    <tr><td>4</td><td>240 mm</td><td>0</td><td>−58.9 mm</td><td>90°</td></tr>
+    <tr><td>5</td><td>0</td><td>90°</td><td>110 mm</td><td>0</td></tr>
+    <tr><td>6</td><td>0</td><td>−90°</td><td>96.7 mm（6FB）</td><td>0</td></tr>
+  </tbody>
+</table>
+
+<blockquote><p>d6 随版本不同：标准版 B = 79.5 mm，<strong>六维力版 6FB = 96.7 mm</strong>，六维力 K 版 6F = 108 mm。</p></blockquote>
+
+<h3>2.5 质量（URDF 已提供，供动力学模块直接用）</h3>
+
+<table>
+  <thead>
+    <tr><th>连杆</th><th>质量（kg）</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>base_link</td><td>0.705</td></tr>
+    <tr><td>link_1</td><td>0.789</td></tr>
+    <tr><td>link_2</td><td>1.380</td></tr>
+    <tr><td>link_3</td><td>1.036</td></tr>
+    <tr><td>link_4</td><td>0.273</td></tr>
+    <tr><td>link_5</td><td>0.313</td></tr>
+    <tr><td>link_6</td><td>0.065</td></tr>
+  </tbody>
+</table>
+
+<p>连杆 1~6 合计约 <strong>3.86 kg</strong>（结构件）；整机自重 <strong>7.9 kg</strong>（说明书，含电机/减速器/六维力传感器）。</p>
+
+<h3>2.6 末端法兰与底座（安装夹爪 / 六维力传感器 / 固定机身）</h3>
+
+<ul>
+  <li><strong>末端法兰</strong>：直径 φ57 mm，6×M4-6H 螺纹孔（镶嵌 304 钢丝牙套）+ 4×H7 定位孔 + 8×φ2.8 通孔，材质 6061-T6（六维力传感器即装在此法兰上）。</li>
+  <li><strong>底座</strong>：4×φ6.5 安装孔，孔距 94×47 mm，外径 φ110 mm，材质 6061-T6。</li>
+  <li><strong>末端对外接口</strong>：6 芯航插 = RS485 + 2 路数字 IO + 电源输出 12V/24V（最大 1.5 A），可直接给夹爪供电并控制。</li>
+</ul>
+
+<h3>2.7 通信（已确认）</h3>
+
+<ul>
+  <li>主通信：以太网（有线网口）+ JSON 协议；另有 WiFi / USB / RS485 / Modbus-RTU-TCP。</li>
+  <li>透传周期：第三代控制器最快 5 ms（适合做动态轨迹规划与视觉伺服）。</li>
+</ul>
+
+<h3>2.8 待确认（剩余）</h3>
+
+<table>
+  <thead>
+    <tr><th>待确认项</th><th>影响</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>夹爪型号（睿尔曼官方 or 自配 V 型二指）</td><td>决定夹爪接口与力反馈</td></tr>
+    <tr><td>GPU 型号</td><td>VLA 训练/推理可行性</td></tr>
+    <tr><td>四目深度相机具体型号（有无 ROS 驱动）</td><td>决定视觉模块工作量</td></tr>
+    <tr><td>仿真用 Gazebo 还是 Webots</td><td>建议 Gazebo（官方开箱即用）</td></tr>
+  </tbody>
+</table>
+
+<h2>三、系统总体架构（双层控制 + 数据流）</h2>
+
+<h3>3.1 数据流（与 OpenPI VLA 计划书一致）</h3>
+
+<pre><code>自然语言指令 + 摄像头图像 + 机械臂当前状态
+              ↓
+        OpenPI VLA 模型
+              ↓
+      机械臂动作序列（末端位姿增量 + 夹爪动作）
+              ↓
+         ROS 控制节点（PID 底层执行）
+              ↓
+        机械臂（ECO65-6FB）+ 夹爪
+              ↓
+         完成抓取与放置</code></pre>
+
+<h3>3.2 分层</h3>
+
+<pre><code>┌──────────────────────────────────────────┐
+│ 应用层    抓取/放置流程编排               │
+├──────────────────────────────────────────┤
+│ 决策层    OpenPI VLA（看 + 听 → 生成动作）│
+├──────────────────────────────────────────┤
+│ 感知层    四目深度相机 → 点云 → 目标位姿  │
+├──────────────────────────────────────────┤
+│ 控制层    PID 关节/笛卡尔控制 + MoveIt    │
+├──────────────────────────────────────────┤
+│ 算法层    FK / IK / 动力学 / 手眼标定     │
+├──────────────────────────────────────────┤
+│ 驱动层    官方 rm_driver + rm_control     │
+├──────────────────────────────────────────┤
+│ 硬件层    ECO65 本体 + 夹爪 + 相机        │
+└──────────────────────────────────────────┘</code></pre>
+
+<blockquote><p>蓝色三层（算法、控制、驱动）是「把动作做准」的部分；感知 + 决策是「决定做什么」的部分。</p></blockquote>
+
+<h2>四、软件环境与官方包（ROS2 Foxy）</h2>
+
+<h3>4.1 环境</h3>
+
+<ul>
+  <li>Ubuntu 20.04 + ROS2 Foxy（官方 <code>ros2_rm_robot</code> 明确只支持 Foxy，勿升级 Humble/Jazzy）。</li>
+  <li>NVIDIA GPU + CUDA + PyTorch（OpenPI 推理需要，建议独立 conda/uv 环境，与 ROS 解耦）。</li>
+  <li>官方包版本 v1.7.0，对应机械臂控制器固件 1.7.3。</li>
+</ul>
+
+<h3>4.2 官方包清单（复用，不重写）</h3>
+
+<table>
+  <thead>
+    <tr><th>官方包</th><th>作用</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>rm_install</code></td><td>一键装 ROS2 / MoveIt2 脚本</td></tr>
+    <tr><td><code>rm_driver</code></td><td>底层驱动（订阅/发布关节状态与指令）</td></tr>
+    <tr><td><code>rm_description</code></td><td>ECO65 URDF 模型 + 坐标系变换</td></tr>
+    <tr><td><code>rm_ros_interfaces</code></td><td>官方消息/服务/动作接口</td></tr>
+    <tr><td><code>rm_bringup</code></td><td>launch 启动</td></tr>
+    <tr><td><code>rm_moveit2</code> + <code>rm_moveit2_config</code></td><td>MoveIt2 规划控制</td></tr>
+    <tr><td><code>rm_control</code></td><td>MoveIt2 ↔ 驱动的通信连接</td></tr>
+    <tr><td><code>rm_gazebo</code></td><td>Gazebo 仿真</td></tr>
+    <tr><td><code>rm_example</code> / <code>rm_doc</code></td><td>示例 / 文档</td></tr>
+  </tbody>
+</table>
+
+<h3>4.3 启动命令</h3>
+
+<pre><code># 仿真
+ros2 launch rm_bringup rm_eco65_gazebo.launch.py
+# 真机
+ros2 launch rm_bringup rm_eco65_bringup.launch.py</code></pre>
+
+<p><strong>关键结论</strong>：官方已把「驱动 + 模型 + MoveIt + Gazebo」全包了。<strong>我们只需要在官方包之上，新增视觉、手眼标定、VLA 接口、数据采集、抓取编排这几块。</strong></p>
+
+<h2>五、自定义包划分（在官方包基础上新增 7 个）</h2>
+
+<pre><code>robot_vla_ws/src/
+├── ros2_rm_robot/          # 官方包（直接拷入，复用）
+├── arm_perception/         # ① 四目深度相机驱动 + 目标检测/位姿
+├── arm_handeye/            # ② 手眼标定（AX=XB）
+├── arm_calibration/        # ③ 运动学误差标定（可选进阶）
+├── arm_control/            # ④ PID 底层控制 + 末端位姿增量跟踪
+├── vla_bridge/             # ⑤ OpenPI ↔ ROS 接口（核心）
+├── vla_data/               # ⑥ 示教数据采集 + 数据集建立
+└── arm_grasp/              # ⑦ 抓取/放置流程编排</code></pre>
+
+<h3>5.1 通信接口（含 VLA 专用话题）</h3>
+
+<table>
+  <thead>
+    <tr><th>类型</th><th>名称</th><th>数据</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>话题</td><td><code>/joint_states</code></td><td><code>sensor_msgs/JointState</code></td><td>关节状态反馈（官方已提供）</td></tr>
+    <tr><td>话题</td><td><code>/camera/image</code></td><td><code>sensor_msgs/Image</code></td><td>相机彩色图</td></tr>
+    <tr><td>话题</td><td><code>/camera/pointcloud</code></td><td><code>sensor_msgs/PointCloud2</code></td><td>点云</td></tr>
+    <tr><td>话题</td><td><code>/vla/instruction</code></td><td>自定义（String）</td><td>语言任务指令</td></tr>
+    <tr><td>话题</td><td><code>/vla/image</code></td><td>自定义</td><td>相机图像（或多视角）</td></tr>
+    <tr><td>话题</td><td><code>/vla/robot_state</code></td><td>自定义</td><td>关节角 + 末端位姿 + 夹爪状态</td></tr>
+    <tr><td>话题</td><td><code>/vla/action</code></td><td>自定义</td><td>VLA 生成的动作（位姿增量 + 夹爪）</td></tr>
+    <tr><td>服务</td><td><code>/fk</code> <code>/ik</code></td><td>自定义 srv</td><td>正/逆运动学</td></tr>
+  </tbody>
+</table>
+
+<h3>5.2 坐标系（tf 树，与官方 URDF 一致）</h3>
+
+<pre><code>world → baselink → Link1 → Link2 → Link3 → Link4 → Link5 → Link6 → gripper
+                       ↑
+                camera_link（眼在手外 eye-to-hand，固定安装）</code></pre>
+
+<blockquote>
+<p><strong>命名已按官方 <code>rm_description</code> 实测修正</strong>（2026-10-19），与手册写法完全不同，写代码务必照抄这一套：</p>
+<ul>
+  <li>根坐标系 = <strong><code>baselink</code></strong>（不是 <code>base_link</code>，没有下划线）</li>
+  <li>连杆 = <strong><code>Link1</code>~<code>Link6</code></strong>（不是 <code>link_1</code>，<code>L</code> 大写、无下划线）</li>
+  <li><strong>没有 <code>tool0</code></strong>，末端就是 <code>Link6</code>，夹爪直接装在 Link6 上</li>
+  <li>关节名 = <code>joint1</code>~<code>joint6</code></li>
+  <li>零位实测：<code>baselink → Link6</code> 平移 <code>[−0.086, 0.021, 0.772]</code>，与 MDH 手算值吻合</li>
+</ul>
+</blockquote>
+
+<h2>六、分模块开发路线</h2>
+
+<h3>模块 1：arm_perception（视觉）</h3>
+<ul>
+  <li><strong>干嘛</strong>：四目深度相机 → RGB 图 + 深度融合点云 → 目标检测 + 6D 位姿估计。</li>
+  <li><strong>四目的好处</strong>：多基线立体视觉，深度更密更稳，正好满足 VLA 需要的「图像 + 点云」。</li>
+  <li><strong>输出</strong>：目标物体在相机坐标系下的位姿（或直接给 VLA 用原始图像）。</li>
+</ul>
+
+<h3>模块 2：arm_handeye（手眼标定）</h3>
+<ul>
+  <li><strong>干嘛</strong>：求「相机 ↔ 机械臂基座」的固定变换（Eye-to-Hand，AX=XB）。</li>
+  <li><strong>流程</strong>：标定板装到末端 → 机械臂多姿态移动 → 记录末端位姿 A + 相机看到标定板位姿 B → 求解 X。</li>
+  <li><strong>误差指标</strong>：粗抓取 &lt; 20 mm，一般抓取 &lt; 10 mm，精细抓取 &lt; 5 mm（OpenPI 建议）。</li>
+</ul>
+
+<h3>模块 3：arm_calibration（运动学标定，可选）</h3>
+<ul>
+  <li><strong>干嘛</strong>：修正 ECO65 装配误差、关节零位误差，进一步提高精度。</li>
+</ul>
+
+<h3>模块 4：arm_control（PID 底层控制）</h3>
+<ul>
+  <li><strong>干嘛</strong>：接收 VLA/MoveIt 的动作目标（关节角或末端位姿增量），用 PID 精确跟踪。</li>
+  <li><strong>关键</strong>：关节空间 PID + 重力前馈 + 抗积分饱和；末端位姿增量 → IK → 关节目标 → PID。</li>
+  <li><strong>力控（六维力版新增）</strong>：可叠加末端力控（恒力贴合、柔顺插入），用于抓取/放置的接触阶段。</li>
+  <li><strong>安全</strong>：关节限位（用上面 ECO65 实参表）、速度/加速度限制、工作空间软限位。</li>
+</ul>
+
+<h3>模块 5：vla_bridge（VLA 接口，核心）</h3>
+<ul>
+  <li><strong>干嘛</strong>：把 ROS 数据喂给 OpenPI，把 OpenPI 输出转成 ROS 控制指令。</li>
+  <li><strong>输入</strong>：<code>/vla/instruction</code> + <code>/vla/image</code> + <code>/vla/robot_state</code>。</li>
+  <li><strong>输出</strong>：<code>/vla/action</code>（末端位姿增量 + 夹爪动作）。</li>
+  <li><strong>关键</strong>：OpenPI 推理跑在独立 conda 环境，通过该 bridge 与 ROS 通信（解耦，不污染 ROS 环境）。</li>
+</ul>
+
+<h3>模块 6：vla_data（数据采集）</h3>
+<ul>
+  <li><strong>干嘛</strong>：示教采集（拖动示教 / 手柄 / MoveIt 目标点），记录单条轨迹。六维力版首选<strong>拖动示教</strong>（手拽即录，无需编程，最自然）。</li>
+  <li><strong>记录内容</strong>：图像 + 关节角/速度 + 末端位姿 + 夹爪状态 + 语言指令 + 时间戳 + 成功/失败标签。</li>
+  <li><strong>数据量</strong>：基础验证每任务 20~50 条，初步微调 50~100 条，稳定抓取 100~300 条。</li>
+</ul>
+
+<h3>模块 7：arm_grasp（抓取编排）</h3>
+<ul>
+  <li><strong>干嘛</strong>：把「识别 → 决策 → 执行」串成完整抓取/放置流程，含失败重试。</li>
+</ul>
+
+<h2>七、分阶段里程碑（融合我原 7 阶段 + OpenPI 8 阶段）</h2>
+
+<table>
+  <thead>
+    <tr><th>阶段</th><th>内容</th><th>验收标准</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>Phase 0</strong></td><td>环境：Ubuntu 20.04 + Foxy + 官方包编译 + Gazebo</td><td><code>rm_eco65_gazebo.launch.py</code> 能启动，RViz 显示 ECO65</td></tr>
+    <tr><td><strong>Phase 1</strong></td><td>模型验证：URDF + TF + 关节方向/零位核对</td><td>RViz 模型运动与真机一致，TF 树完整</td></tr>
+    <tr><td><strong>Phase 2</strong></td><td>基础控制：关节/笛卡尔/FK/IK/MoveIt/夹爪</td><td>能到指定关节角/末端位姿，MoveIt 出无碰撞轨迹</td></tr>
+    <tr><td><strong>Phase 3</strong></td><td>PID 底层控制：关节 PID + 重力前馈</td><td>轨迹跟踪误差小、无震荡</td></tr>
+    <tr><td><strong>Phase 4</strong></td><td>视觉标定：相机内参 + 手眼标定（AX=XB）</td><td>目标坐标准确转到机器人坐标，误差 &lt; 10 mm</td></tr>
+    <tr><td><strong>Phase 5</strong></td><td>OpenPI 部署 + vla_bridge</td><td>模型能推理，ROS 能收发 <code>/vla/*</code> 四个话题</td></tr>
+    <tr><td><strong>Phase 6</strong></td><td>数据采集 + 微调</td><td>得到本地 VLA 模型，动作适配 ECO65 动作空间</td></tr>
+    <tr><td><strong>Phase 7</strong></td><td>仿真抓取测试</td><td>Gazebo 里完成「看→算→抓→放」闭环，无碰撞</td></tr>
+    <tr><td><strong>Phase 8</strong></td><td>真机抓取测试（分阶段）</td><td>固定目标 → 随机位置 → 多物体语言抓取，记录成功率</td></tr>
+  </tbody>
+</table>
+
+<h2>八、关键技术点速查</h2>
+
+<table>
+  <thead>
+    <tr><th>概念</th><th>大白话</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>VLA 模型</td><td>视觉 + 语言 + 动作，看图和指令直接输出动作</td></tr>
+    <tr><td>双层控制</td><td>VLA 决定「做什么」，PID 负责「做准」</td></tr>
+    <tr><td>动作空间</td><td>建议用「末端位姿增量 [Δx Δy Δz Δroll Δpitch Δyaw] + 夹爪」，易适配不同机械臂</td></tr>
+    <tr><td>Eye-to-Hand</td><td>相机固定在外，视野大稳定，适合桌面抓取</td></tr>
+    <tr><td>手眼标定 AX=XB</td><td>求相机和手的固定关系，让「相机看到的」换成「手要动的」</td></tr>
+    <tr><td>阻尼最小二乘</td><td>求逆加阻尼，防止奇异位形卡死（你现有 MATLAB 已在用）</td></tr>
+    <tr><td>六维力传感器</td><td>同时测 3 个方向的力 + 3 个方向的力矩，用来力控/拖动/夹持力反馈</td></tr>
+    <tr><td>拖动示教</td><td>手拽机械臂录轨迹，六维力版支持，采集 VLA 数据最自然</td></tr>
+    <tr><td>重力前馈</td><td>提前补偿重力，PID 只管道小误差</td></tr>
+  </tbody>
+</table>
+
+<h2>九、风险与待确认</h2>
+
+<ol>
+  <li><strong>版本锁定</strong>：官方只支持 Foxy，勿升级；OpenPI 推理独立 conda 环境，与 ROS 解耦。</li>
+  <li><strong>仿真统一</strong>：官方用 Gazebo（<code>rm_gazebo</code> 开箱即用）；OpenPI 计划书提 Webots——<strong>建议以 Gazebo 为主</strong>，Webots 可选。</li>
+  <li><strong>视觉方案</strong>：四目深度相机作为「RGB-D + 点云」源（Eye-to-Hand 优先），后期可加腕部相机双摄。</li>
+  <li><strong>夹爪</strong>：V 型夹爪属二指夹爪一种，需带夹紧力反馈；六维力传感器可作为夹持力反馈来源，但夹爪本身仍要确认用睿尔曼官方夹爪还是自配。</li>
+  <li><strong>真机安全</strong>：急停、软限位（用 ECO65 关节限位表）、低速起步、碰撞检测（六维力传感器可作额外碰撞检测源）。</li>
+  <li><strong>六维力标定</strong>：更换六维力末端后须重新标定初始力与重心，否则力读数有偏置。</li>
+  <li><strong>待确认（剩余）</strong>：夹爪型号、GPU 型号、四目相机型号、仿真引擎（Gazebo/Webots）。</li>
+</ol>
+
+<blockquote><p><strong>一句话总结</strong>：在官方 <code>ros2_rm_robot</code>（驱动+模型+MoveIt+Gazebo 已就绪）之上，新增视觉、手眼标定、PID、VLA 接口、数据采集、抓取编排 7 个包，用「VLA 决策 + PID 执行」双层控制，实现 ECO65 六维力版的语言驱动智能抓取。</p></blockquote>
+
+<div class="footnote">
+  本文档由 Markdown 源文件 <code>02_机械臂整机开发方案.md</code> 转换而来，原文件保持不变。
+</div>
+
+</div>
+</body>
+</html>

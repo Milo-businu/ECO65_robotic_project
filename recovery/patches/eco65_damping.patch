@@ -1,0 +1,62 @@
+diff --git a/rm_description/urdf/rm_eco65_gazebo.urdf b/rm_description/urdf/rm_eco65_gazebo.urdf
+index b728428..811ff61 100644
+--- a/rm_description/urdf/rm_eco65_gazebo.urdf
++++ b/rm_description/urdf/rm_eco65_gazebo.urdf
+@@ -114,7 +114,8 @@
+       upper="3.1923"
+       effort="100"
+       velocity="3.14" />
+-  </joint>
++    <dynamics damping="5.0" friction="0.1"/>
++</joint>
+   <link
+     name="Link2">
+     <inertial>
+@@ -180,7 +181,8 @@
+       upper="2.442"
+       effort="100"
+       velocity="3.14" />
+-  </joint>
++    <dynamics damping="5.0" friction="0.1"/>
++</joint>
+   <link
+     name="Link3">
+     <inertial>
+@@ -246,7 +248,8 @@
+       upper="2.61666"
+       effort="100"
+       velocity="3.92" />
+-  </joint>
++    <dynamics damping="5.0" friction="0.1"/>
++</joint>
+   <link
+     name="Link4">
+     <inertial>
+@@ -312,7 +315,8 @@
+       upper="2.61666"
+       effort="100"
+       velocity="3.92" />
+-  </joint>
++    <dynamics damping="5.0" friction="0.1"/>
++</joint>
+   <link
+     name="Link5">
+     <inertial>
+@@ -378,7 +382,8 @@
+       upper="2.96555"
+       effort="100"
+       velocity="3.92" />
+-  </joint>
++    <dynamics damping="5.0" friction="0.1"/>
++</joint>
+   <link
+     name="Link6">
+     <inertial>
+@@ -444,5 +449,6 @@
+       upper="2.96555"
+       effort="100"
+       velocity="3.92" />
+-  </joint>
++    <dynamics damping="5.0" friction="0.1"/>
++</joint>
+ </robot>

@@ -1,0 +1,341 @@
+# =====================================================================
+# real_params.yaml —— 真机唯一配置文件
+#
+# 【为什么要有这个文件】
+#   云服务器跑的是"仿真"，真机跑的是"实物"。两者的差别全在这一个文件里：
+#   串口名、相机话题前缀、机械臂 IP、手眼标定结果、夹爪开口标定……
+#   代码里不写死任何一台机器的信息，换机器只改这里。
+#
+# 【最重要的一条】
+#   profile.mode 默认是 dry-run（演练），**不会动任何硬件**。
+#   确认三件事之后才改成 real：
+#     ① 机械臂周围清空、急停按钮在手边
+#     ② 相机/夹爪/机械臂都已接好并自检通过
+#     ③ 手眼标定已做（handeye.calibrated: true）
+# =====================================================================
+
+profile:
+  name: "beavertech-real"
+  mode: dry-run              # dry-run | real ← 公开仓库默认演练；动臂前用 arm_unlock.py on
+  allow_arm_motion: false      # 二次开关：只有 true 才真正下发机械臂运动指令
+                                # （夹爪不受此开关限制，但 dry-run 下也是模拟）
+
+# ---------------- 机械臂几何（与仿真 URDF 一致，别随便改） ----------------
+robot:
+  # 空字符串 = 自动按下面顺序找：
+  #   $ECO65_URDF → /tmp/eco65_6fb.urdf → ~/robot_vla_ws/src/.../eco65_6fb.urdf
+  urdf: ""
+  base_frame: "baselink"        # ⚠️ URDF 里实际叫 baselink，不是 base_link（仿真踩过）
+  tip_frame: "Link6"
+  joints: [joint1, joint2, joint3, joint4, joint5, joint6]
+  joint_limits_lo: [-3.1923, -2.61666, -2.61666, -2.61666, -2.96555, -2.96555]
+  joint_limits_hi: [ 3.1923,  2.44200,  2.61666,  2.61666,  2.96555,  2.96555]
+  # 法兰(Link6) → 指尖的偏移，沿【工具 z 轴】
+  # ⚠️ 2026-11-03 真机实测修正：夹爪超出法兰 17.7cm，不是早期估计的 19.5cm
+  #    （19.5cm 是仿真 URDF 里"本体 0.145 + 指长 0.05"的建模值，只用于 Gazebo）
+  #    这个值直接进 IK：错 1.8cm 会让下降终点偏 1.8cm，可能撞方块或夹空。
+  #    换夹爪/换安装方式后必须用尺子重新量【法兰面 → 两指尖连线中点】再改这里。
+  tcp_offset: [0.0, 0.0, 0.153]
+  # 回零/停放姿势 = 观察位（2026-11-09 现场实测、线是松的、能看到标定纸+放置区）
+  #   J1≈86° 把整条臂转到了 -y 方向，所以作业区在 y<0 那一侧，不是正前方！
+  #   法兰 (0.042, -0.267, 0.414)，工具竖直向下，指尖离台面 23.7cm。
+  #   换姿势前先 pose_view 看形状，再用 jog --joint 小步试。
+  home_joints: [1.5030, 0.5660, -1.6340, -0.5430, 1.5900, -1.5330]
+
+# ---------------- 安全：线缆包络（2026-11-09 现场实测） ----------------
+# 连接线不够长，【法兰/Link6】只能待在这个长方体里，超出去就是拽线。
+#   x 前方 0~0.50m（从基座中心量）、y 左右 ±0.20m、z 高 0~0.50m（从台面量）
+#   J1 转动时这个盒子【不跟着转】→ 它是基座系里的固定盒子，不是圆柱。
+#
+# ⚠️ 约束对象是【法兰】，不是指尖！工具竖直向下时法兰比指尖高 0.177m，
+#    所以「指尖最高 0.50m」是错的 —— 实际指尖只能到 0.32m 左右。
+#    观察位就是被这条卡住的：想要相机再高一点，必须先换长线。
+#
+# 代码会逐点检查（planner.assert_envelope），超了直接拒绝执行并报出超了多少。
+# 换了长线或挪了线缆走向，只改这里三行即可。
+safety:
+  # block = 超了拒绝执行（等线长量准了建议用这个）
+  # warn  = 只告警继续（★ 现在用这个：现场反馈"停放位法兰 0.72m 时线是松的"，
+  #         说明这组 0.50m 不是绝对上限，先别拿它拦人）
+  envelope_mode: warn
+  # ★ 以【home 的法兰位置】为锚点的"安全窗口"（2026-11-09 现场确认）：
+  #   相机 USB 线只能在身前垂一个大圈，**往上抬 / 往外伸**会把圈拉直 → 绷线。
+  #   而抓取任务全程都在锚点【下方】（观察位 → 下降到方块 → 抬 10cm → 转运），
+  #   所以只限制"往上、往外、往侧"三个方向，往下不限。
+  #   这正是图 1 那个姿势安全的几何解释：手收在里侧、圈还是弧的。
+  safe_window_m:
+    up: 0.05            # ★ 往上最危险：最多比 home 高 5cm（照片里绷线就是往上抬）
+    out: 0.30           # 往前=往松弛圈里走，放松（先给 30cm，实测后再收）
+    side: 0.20          # 左右各 20cm（照片里同时向左摆了；先松，等 home 定成实测姿势再收）
+  # ⚠️ 绝对盒子已停用：2026-11-09 实测的安全 home 法兰 y=-0.267，超出 ±0.20 却有松弛，
+  #    说明这组数字不是绝对上限。留着当参考，改成 null 让它不参与判断。
+  #    真正生效的是上面的 safe_window_m（相对 home）。
+  cable_envelope_m: null
+  # 参考值（要用就取消注释并把 null 换成它）：
+  # cable_envelope_m:
+  #   x: [0.00, 0.55]
+  #   y: [-0.35, 0.20]
+  #   z: [0.00, 0.60]
+
+# ---------------- 机械臂运动接口 ----------------
+arm:
+  # movej  = 用 /rm_driver/movej_cmd 逐点下发（带控制器规划，安全，默认）
+  # action = 用 /rm_group_controller/follow_joint_trajectory（rm_control 透传）
+  #          ⚠️ rm_control 的实现要求 points 带 velocities/accelerations 且 ≥4 点，
+  #             仿真脚本只发 positions，直接照搬会越界崩溃 → 仅高级用途
+  # dry-run = 只打印，不下发
+  backend: movej
+  movej_cmd_topic: /rm_driver/movej_cmd
+  movej_result_topic: /rm_driver/movej_result
+  action_name: /rm_group_controller/follow_joint_trajectory
+  speed: 10                     # 速度百分比（1~100，越小越慢）
+  # ★ 2026-11-09：真机第一次调试统一 10。稳了再改 20，别超过 20。
+  #   第一次用 jog 建议再降：jog.py --speed 5
+  speed_hard_max: 20            # 代码硬上限：配得再大也按这个走（防手滑写成 100）
+  block: true
+  dof: 6
+  trajectory_connect: 0
+
+  # 关节角从哪来（感知算 FK 必须用它，禁止缓存旧的位姿）
+  # joint_states = rm_driver 的 UDP 主动上报（推荐）
+  # arm_state    = 请求式查询 /rm_driver/get_current_arm_state_result
+  # open_loop    = 用刚下发的目标角当反馈（⚠️ 仅演练/调试，真机抓取不准用）
+  joint_source: joint_states
+  joint_states_topic: /joint_states
+  arm_state_cmd_topic: /rm_driver/get_current_arm_state_cmd
+  arm_state_result_topic: /rm_driver/get_current_arm_state_result
+  stop_cmd_topic: /rm_driver/move_stop_cmd
+
+  # ⚠️⚠️ 下面两项必须和 rm_driver/config/rm_eco65_config.yaml 保持一致，
+  #     否则 /joint_states 永远没有数据（驱动把 UDP 包发给了不存在的地址）。
+  #     真机上先跑 `hostname -I` 查本机 IP，把 udp_ip 改成它。
+  arm_ip: "192.168.1.18"
+  udp_ip: "192.168.1.10"
+
+# ---------------- 相机 D435i ----------------
+camera:
+  # 话题前缀：d435i_eco65.launch.py 会【自动反推】camera_namespace，
+  #   本值 /camera/d435i → namespace=camera、name=d435i → 话题 /camera/d435i/...
+  #   若把这里改成 /d435i，namespace 会自动置空 → 话题 /d435i/...
+  #   感知节点读的是同一个值，两者永远一致，不用分别改。
+  # 拿不准就 `ros2 topic list | grep d435i` 看真实名字再回来填。
+  prefix: /camera/d435i
+  color_suffix: color/image_raw
+  info_suffix: color/camera_info
+  depth_suffix: aligned_depth_to_color/image_raw
+  points_suffix: depth/color/points
+  serial_no: ""                 # 建议填序列号钉死设备，避免开错相机
+  width: 640
+  height: 480
+  fps: 30
+
+# ---------------- 手眼标定 X = T_flange←camera_optical ----------------
+handeye:
+  # ★ 2026-11-09 实测：A4 上 4 个 ArUco，每个【黑框外沿到外沿】= 5.95 cm = 0.0595 m
+  #   collect_handeye / verify_handeye 不传 --marker-size 时就读这里的值。
+  #   这个数是手眼【尺度】的锚：错 1mm 整体坐标就带 1mm 系统偏差，且残差看不出来。
+  marker_size_m: 0.0595
+  calibrated: true             # ⚠️ false 时感知节点拒绝输出真机目标位姿
+  # 【感知用】X = T_flange←camera_optical，4x4 行优先。
+  #   handeye_calib.py 求出 X 后把矩阵贴到这里。感知节点直接用它做
+  #   p_base = FK(q) · X · p_cam，不依赖 TF 树（避开"双父"坑）。
+  matrix_4x4:
+    - [0.99888689, -0.04411744, -0.01669199, -0.03221303]
+    - [0.04484383, 0.99793509, 0.04598459, -0.07953438]
+    - [0.01462880, -0.04668194, 0.99880268, -0.00057801]
+    - [0.00000000, 0.00000000, 0.00000000, 1.00000000]
+  # 【可视化用】static_transform_publisher 参数：flange → d435i_link
+  #   填 handeye_calib.py 输出的「推荐接法」那 7 个数（qx qy qz qw 是 xyzw，w 在最后）。
+  #   ⚠️ 只给 RViz / tf2_echo 用，抓取计算不看它。缺这两项时 launch 会跳过并告警。
+  tf_xyz: [-0.032213, -0.079534, -0.000578]
+  tf_quat_xyzw: [-0.518525, 0.473093, -0.504107, 0.503180]
+  # 仅供 dry-run 演示的占位值（安装估计：法兰旁 +x 5cm、抬高 13cm、光轴转向）
+  # ⚠️ 这不是标定结果，真机绝对不能拿它去抓东西
+  fallback_xyz: [0.05, 0.0, 0.13]
+  fallback_quat_wxyz: [0.5, -0.5, 0.5, -0.5]
+
+# ---------------- 感知 ----------------
+perception:
+  # ★ 目标从哪来：
+  #   color = 颜色阈值分割（默认，最稳、零延迟、可解释；4cm 纯色方块够用）
+  #   brain = 端到端识别大模型（开放词汇，"绿方块/苹果/红色积木"都能认）
+  #   两者共用同一套「框/掩码 → 对齐深度 → FK·X → 基座系」几何，只是前面那步不同。
+  #   切 brain 前先跑：python3 brain.py --check
+  target_source: color          # color | brain
+  target_name: "green cube"     # brain 模式下要识别什么（英文通常更准）
+  target_color: green           # green | red | blue | auto（auto 挑像素最多的颜色）
+  # ★ 颜色阈值（2026-11-04 从代码搬到配置）：现场光照 / 自动曝光会让它漂移，
+  #   用 tune_perception.py 可视化对准后把数字填回来，不用改 Python。
+  #   green: g>min 且 g>r+diff_r 且 g>b+diff_b
+  #   red  : r>min 且 r>g+diff_g 且 r>b+diff_b
+  #   blue : b>min 且 b>r+diff_r 且 b>g+diff_g
+  color_thresholds:
+    green: {min: 3, diff_r: 3, diff_b: 16}
+    red:   {min: 100, diff_g: 40, diff_b: 40}
+    blue:  {min: 61, diff_r: 10, diff_g: 6}
+  box_half_size_m: 0.02         # 4cm 方块半边长（已知几何，不是位置真值！）
+                                # ⚠️ 真机方块必须是 4cm：grasp_task 用它算方块中心和预夹开口(40mm)
+  # ★ 常数偏置补偿（默认 0）。只在「连续几次抓取都把方块往同一个方向推」时启用：
+  #   那是 X 的平移分量带了一个固定误差，不是阈值问题。符号：偏置 = -(被推方向)。
+  #   ⚠️ 必须用【标定板/固定参考物】量出来，绝不能拿方块真值去凑（工程伦理红线）。
+  #   换标定/换安装后必须清零。
+  xy_bias_m: [0.0, 0.0]
+  min_pixels: 30                # 颜色分割至少要命中这么多像素，否则不发布
+  depth_min_m: 0.20             # D435i 最小可测约 0.28m；腕装目标尽量落在 0.3~0.6m
+  depth_max_m: 0.90
+  samples: 12                   # 最近 N 帧取均值；抖动超 jitter_max_m 就不发布
+  jitter_max_m: 0.02
+  target_topic: /grasp/target_xyz   # Float64MultiArray: [x, y, z] in base_link
+
+# ---------------- 夹爪 MS42DC ----------------
+gripper:
+  port: /dev/motor_serial       # 26 号手册的 udev 固定名；没有就填 /dev/ttyUSB0
+  baud: 115200                  # USB 串口固定，不可改
+  addr: 1
+  microstep: 0x20               # 32 细分
+  speed_rads: 20.0
+  direction_close: 1            # 1=顺时针=闭合
+  direction_open: 0
+
+  # 开口映射：带【机械空程】的分段线性模型
+  #    w(angle) = max_width_mm - max(0, angle - deadzone_deg) / deg_per_mm
+  #    angle(w) = deadzone_deg + (max_width_mm - width_mm) * deg_per_mm
+  # ★ 下面两个数是 2026-11-03 真机实测拟合值（读数 130/114/97/77/57/37/17/10，
+  #   稳定段每 300° 恰好 20mm → 15.0 °/mm；开头两段共丢掉约 105° 空程）。
+  #   还没跑过 --verify 的机器不要直接信：先跑
+  #     python3 calibrate_gripper.py --verify      （先验「发 300° 是否真走 300°」）
+  #   再跑正式标定，通过后把 calibration_done 改 true。
+  # ★ 2026-11-09 真机实测拟合（7 组数据：130@0° / 112@278° / 93@577° / 73@876°
+  #   / 54@1175° / 34@1474° / 14@1773°，反馈角度为回读累计值）
+  #   → deg_per_mm = 15.2022、deadzone = 12.2°、残差 0.50mm（很好）
+  #
+  #   ⚠️ 与 11-03 那次"空程 105°"不同：那次是从【指令位】出发，要先吃掉反向间隙；
+  #      这次 home 是压到机械限位，空程只有 12°。用 105 会让第一次闭合多走 6mm
+  #      （预夹 52 实际变 46），是"夹空/推走方块"的隐形原因。
+  calibration_done: true
+  max_width_mm: 130.0          # 卡尺实测（home 后两指尖内侧）
+  min_width_mm: 10.0
+  deg_per_mm: 15.2022          # 实测
+  deadzone_deg: 12.2           # 实测（旧值 105 是另一种测法，已弃用）
+
+  open_width_mm: 90.0           # 张开到 90mm（够放进 4cm 方块）
+  # 预夹余量决定「方块摆歪多少度还能夹进去」。几何关系（本项目推导）：
+  #   投影宽度 = 40·(|cosθ|+|sinθ|) ≤ 40 + 余量
+  #   余量 8mm → θ 容差 ±13°；余量 12mm → ±25°；余量 14mm → ±28°
+  # 现场方块是人摆的，12mm 比 8mm 稳一倍，代价只是两指多张 4mm。
+  pregrip_margin_mm: 18.0
+  interference_mm: 3.0          # 夹持目标开口 = 物体宽 - 3mm → 顶到物体后堵转停
+                                # 这就是真机的"力控"：靠堵转保护，不是靠电流指令
+  move_timeout_s: 6.0
+  query_interval_s: 0.3
+
+  cmd_topic: /gripper/cmd       # std_msgs/String: open | close | grip:<mm> | stop | query
+  width_topic: /gripper/cmd_width   # std_msgs/Float64: 目标开口 mm
+  state_topic: /gripper/state   # Float64MultiArray: [开口mm, 电机角度°, 到位0/1, 堵转0/1]
+
+# ---------------- 抓取任务 ----------------
+task:
+  policy: geometric             # geometric（稳，默认） | vla（实验性）
+  approach_height_m: 0.16       # 相对方块中心的上方高度（夹爪 17.7cm，别再高，IK 会无解）
+  descend_steps: 6
+  lift_height_m: 0.10
+  lift_steps: 5
+  # 观察位姿：直接给【关节角】，不做 IK。
+  #   为什么不用 IK：仿真里那个 [0.20,0.25,0.30] 是"相机位置"，靠相机光轴对准目标，
+  #   和真机"工具 z 轴竖直向下"的约束不是一回事，照搬会 IK 无解（preflight 实测踩到）。
+  #   真机上怎么定：用 jog.py（键盘示教）把臂摆到"相机能俯视桌面、夹爪不挡视野"的姿势，
+  #   再 `timeout 3 ros2 topic echo /joint_states` 读出 6 个关节角，填到这里。
+  # 观察位 = 与 home 完全相同（任务起步不移动；相机在此能看到标定纸和放置区）
+  observe_joints: [1.5030, 0.5660, -1.6340, -0.5430, 1.5900, -1.5330]
+  # 桌面作业区中心（演练/兜底用；真机有感知时以感知为准）
+  # ★ 这个值不要凭估：先跑 workspace_map.py，它会画出「三层都可达」的真实区域。
+  #   2026-11-04 云机按 URDF 扫格（工具竖直向下）：稳定区只有 x 0.12~0.40、y ±0.34
+  #   （≈0.19 m²），远小于"1m×1m"。x=0.40 已在边界上，所以中心取 0.30。
+  # 实测（2026-11-09 第二次）：方块挪到 (0.172,-0.341)，指尖与方块上表面平齐时
+  #   z=0.054 → 顶面 0.054、中心 0.034。这个位置离底座 0.38m，IK 余量宽松。
+  #   ⚠️ 这组值只用于演练/兜底；真机跑起来目标由感知给。
+  work_aim_m: [0.172, -0.341, 0.034]
+  settle_s: 1.0
+  abort_on_target_shift_m: 0.01       # 下降途中目标水平漂移超过 1cm 就中止
+  # ★ 2026-11-10 实测：下降后相机已在 <0.28m 盲区，二次观测要么超时、要么给出
+  #   13 / 25 / 214 mm 的垃圾位移 —— 这个检查没有可信区间，默认关闭。
+  #   （当天 P3、P4 两次好抓取就是被它误杀的；要重开就改 true，但先解决近距深度）
+  post_descend_check: false
+
+  # ★ 兜底路径：目标位置由【示教】给定，不依赖相机与手眼。
+  #   什么时候用：手眼当天没收敛，但必须在一天内把「抓取+放置」跑通。
+  #   怎么填：用 jog.py 把【指尖】移到方块顶面中心，读 teach_place_point.py 打印的 xyz，
+  #          填到这里（例如 [0.3621, 0.0143, 0.0415]），然后照常 start_task:=true。
+  #   ⚠️ 填了它 = 只认这一个位置：方块挪动就得重新示教。演示/兜底可用，不是最终形态。
+  #   ⚠️ 置 null 时走视觉（需要手眼标定完成）。
+  fixed_target_xyz: null
+
+# ---------------- 放置（place）----------------
+# 抓完放到【固定区域】。和抓取不同，放置点不靠视觉，是示教出来的固定坐标。
+#
+# 为什么单独一段：抓取的目标位置每帧都在变（感知给的），放置的目标永远不变，
+# 所以它属于"标定结果"而不是"感知结果"——量一次，写进配置，长期用。
+#
+# 坐标约定（最容易搞错的地方，务必看一遍）
+#   surface_z   放置台面的高度（方块底面最终落在这一层）
+#   center_z    = surface_z + 方块半边长      ← 方块中心
+#   release_z   = center_z + release_gap_m    ← TCP 实际降到这里就停，给台面留余量
+#   因为真机夹持点时 TCP 就压在方块中心，所以 TCP 到 center_z 时方块底面正好贴台面。
+#
+# 怎么量（别手估，用脚本）：
+#   python3 teach_place_point.py        # 指尖对准放置区中心、刚好碰到台面，回车读数值
+place:
+  enabled: true
+  # 放置区中心的地面 xy（基座系 baselink，单位 m）。用 teach_place_point.py 读出。
+  # ⚠️ 下面的值只是"占位默认"，必须换成你实测的：先跑 preflight.py，
+  #    IK 规划自检会告诉你这个点在当前高度下能不能到（到不了会直接 ❌）。
+  xy: [-0.1204, -0.3587]
+  surface_z: 0.0340
+                                # ⚠️ 填错 1cm = 释放时多掉 1cm（方块会歪）或压到台面
+
+  approach_height_m: 0.16       # 转运高度（台面以上）。必须高于抬升终点，否则会撞台面
+  release_gap_m: 0.015
+  up_steps: 3                   # ① 原地竖直抬升的路径点数
+  across_steps: 6               # ② 水平平移的点数（越多越像直线，但下发越慢）
+  descend_steps: 6              # ③ 竖直下降的点数
+  retreat_height_m: 0.18        # 释放后抬到多高再走（要 ≥ 转运高度）
+                                # ⚠️ 设太高会超出可达空间：surface 0.02 + 0.18 = z0.20 是
+                                #    xy=[0.32,-0.20] 附近的实际上限，再高 IK 就无解了
+  retreat_steps: 4
+  release_settle_s: 0.8         # 张嘴后等多久再撤离（让方块落稳）
+  grip_check: true              # 张开后比对开口变化：没变大 = 方块卡在指间（软告警）
+  return_home: true             # 放完回 home。⚠️ 这一步是关节空间走位，台面有高障碍物改 false
+
+# ---------------- 端到端识别「大脑」（可选，默认关闭） ----------------
+# 定位：只负责「目标在哪（2D 框）+ 叫什么」，3D 位置仍由深度 + FK·X 算。
+# 为什么这么切：让大模型直接吐 3D/动作，精度远不如「2D 框 + 对比深度反投影」，
+# 出错了也没法查；把它限制在擅长的「认东西」上，误差链才可控。
+#
+# 为什么是 HTTP 服务而不是本地库：真机是 Ubuntu 20.04 + ROS2 Foxy + Python 3.8，
+# 主流推理框架早不支持 3.8；模型放独立环境（Ollama/LM Studio/vLLM/conda py3.10），
+# 机器人只发一张 JPEG、收一段 JSON。换模型 = 改两行配置，不动 ROS 环境。
+#
+# ★ RTX 3070 8GB 的现实选择（【外验】2026-11 检索，本机未实测）
+#   Qwen2.5-VL-3B-Instruct Q4_K_M：权重 ~1.9GB + mmproj ~1.3GB ≈ 5~6GB 显存 → 能跑，首选
+#   Qwen2.5-VL-7B  Q4_K_M：~7.1GB，占 90% 显存 → 抓取/标定同机时不建议
+#   Florence-2-large 0.77B：只要框、不要"讲"的话更轻更快
+#   装了 Ollama 的话：ollama pull qwen2.5vl:3b  然后 url 用下面这个默认值即可
+brain:
+  enabled: false                # true + perception.target_source: brain 才生效
+  url: "http://127.0.0.1:11434/v1/chat/completions"   # Ollama / LM Studio / vLLM 都兼容
+  model: "qwen2.5vl:3b"
+  timeout_s: 8.0
+  interval_s: 0.5               # 多久问一次（推理约 0.5~2s，别设太小）
+  max_age_s: 3.0                # 框超过这么久没更新就当没有
+  fallback_to_color: true       # 大脑没给结果时，本轮退回颜色阈值（保证不至于停摆）
+  # 提示词留空用内置模板（要求模型只回 JSON：{"found":true,"bbox_2d":[x1,y1,x2,y2]}）
+  prompt: ""
+
+# ---------------- VLA（OpenPI π0.5-DROID） ----------------
+vla:
+  enabled: false
+  url: "http://127.0.0.1:8000/predict"
+  prompt: "pick up the green cube"
+  timeout_s: 10.0
+  # ⚠️ π0 期望第三人称场景视角(base_0_rgb)，本项目只有腕装相机。
+  #    这里只保证"接口能通"，不保证抓取效果（详见 17 号文档第 7 节）。

@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>arm_grasp</name>
+  <version>0.1.0</version>
+  <description>真机整机抓取：MS42DC 夹爪 ROS2 驱动、D435i 感知、抓取任务总控、一键启动</description>
+  <maintainer email="noreply@users.noreply.github.com">ubuntu</maintainer>
+  <license>Apache-2.0</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>trajectory_msgs</exec_depend>
+  <exec_depend>control_msgs</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+
+  <!-- ⚠️ 故意【不】在这里声明 rm_ros_interfaces / rm_driver / rm_control /
+       realsense2_camera：
+       这些是同一个工作空间里的 C++ 驱动包，只在【运行时】提供话题/消息，
+       本包是纯 Python，构建期不 import 它们（Movej 是在 MoveJBackend.__init__
+       里才导入的）。colcon-ros 对 ament_python 包会把 exec_depend 当成
+       构建期环境钩子检查：install/<pkg>/share/<pkg>/package.sh 不存在就直接
+       报错退出（真机 2026-11-03 实测）。把它们列在这里，等于要求"新 clone
+       的工作空间必须先把整个 ros2_rm_robot 编译完才能编抓取包"，是错误耦合。
+       正确做法：运行期先决条件写在 README / 30 号手册，由 restore_real.sh
+       显式补编。 -->
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

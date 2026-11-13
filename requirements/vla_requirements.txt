@@ -1,0 +1,32 @@
+# =====================================================================
+# VLA 环境关键依赖钉死（对应 conda 环境 openpi，Python 3.11）
+#
+# ⚠️ 本文件是"说明 + 速查"，不是直接 `pip install -r` 用的：
+#    torch 需要 --index-url https://download.pytorch.org/whl/cu118
+#    其余靠 recovery/setup_vla.sh 统一安装（已按下面钉死）。
+#
+# 完整可复现清单见同目录 vla_full_freeze.txt（从可用服务器 `pip freeze` 导出）。
+# 恢复后建议核对：~/miniconda3/envs/openpi/bin/pip freeze | diff - requirements/vla_full_freeze.txt
+# =====================================================================
+
+# 1) OpenPI 本体（钉死 commit；含第三人称/腕部相机接口与 π0.5-DROID 推理）
+#    git clone https://github.com/Physical-Intelligence/openpi.git ~/openpi
+#    cd ~/openpi && git checkout 215abfb217dbac7d5f1273282331b9b1866c0479
+#    ~/miniconda3/envs/openpi/bin/pip install -e .
+
+# 2) LeRobot（必须这个 rev，新版 API 不兼容旧 openpi）
+lerobot @ git+https://github.com/huggingface/lerobot.git@0cf864870cf29f4738d3ade893e6fd13fbd7cdb5
+
+# 3) 三钉（装完 lerobot 后必查：它会把 numpy 顶到 2.x，必须回滚，否则 zarr/openpi 报错）
+numpy==1.26.4
+pyarrow==17.0.0
+datasets==2.21.0
+
+# 4) PyTorch（CUDA 11.8 运行时，兼容驱动 >=450；50 系 Blackwell 改 cu128）
+#    ~/miniconda3/envs/openpi/bin/pip install --index-url https://download.pytorch.org/whl/cu118 torch torchvision
+torch==2.7.1+cu118
+
+# 5) VLA 服务边界依赖
+fastapi
+uvicorn
+pillow

@@ -1,0 +1,26 @@
+.DS_Store
+__pycache__/
+*.pyc
+*.pyo
+.env
+.vscode/
+/WHEELTEC/
+build/
+install/
+log/
+# 真机上的 src/ 是「从旧工作空间软链过来的第三方包」（如 realsense2_camera），
+# 或者云端那种 src -> robot_code 的软链；都不该进版本库（包体大、与本项目无关）。
+# 本项目自己的代码在 robot_code/ 下，不受影响。
+/src/
+
+# ---- 公开仓库：不提交运行产物与本地私有配置 ----
+logs/
+*.log
+*.csv
+*.bag
+*.db3
+*.bak.*
+*.orig
+/docs/screenshots/
+# 真机本机专用（含真实 IP / 串口 / 标定），从模板复制后再改
+# config/real_params.local.yaml

@@ -1,0 +1,208 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro" name="rm_eco65_description">
+  <!-- ① 原样复用官方 ECO65 模型（含 6FB 末端与 ros2_control） -->
+  <xacro:include filename="$(find rm_gazebo)/config/gazebo_eco65_description.urdf.xacro"/>
+
+  <!-- ===========================================================
+       ② 轮趣 MS42DC 二指夹爪（对齐真机参数）
+          本体 63 x 63 x 165.5 mm，370 g；开口 10~120 mm
+          仿真用 revolute 铰指（prismatic 在 gazebo_ros2_control 里注册不上）
+          夹爪沿末端旋转轴(Link6 +z)同轴延伸：本体 0.145 + 指长 0.05 → 指尖 z=0.195
+          （挂载 joint rpy="0 -1.5708 0" 把夹爪局部 x 轴转到 Link6 +z）
+          开口 = 2*(0.026 + 0.05*sinθ - 0.004*cosθ)：θ=+0.20→64mm(张开)，θ=-0.05→39mm(夹紧40mm方块)
+       =========================================================== -->
+  <link name="gripper_base">
+    <visual>
+      <origin xyz="0.0725 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.145 0.063 0.063"/></geometry>
+      <material name="grip_gray"><color rgba="0.35 0.35 0.35 1"/></material>
+    </visual>
+    <collision>
+      <origin xyz="0.0725 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.145 0.063 0.063"/></geometry>
+    </collision>
+    <inertial>
+      <origin xyz="0.0725 0 0" rpy="0 0 0"/>
+      <mass value="0.37"/>
+      <inertia ixx="0.00025" iyy="0.00097" izz="0.00097"
+               ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </link>
+  <joint name="gripper_joint" type="fixed">
+    <parent link="Link6"/>
+    <child link="gripper_base"/>
+    <origin xyz="0 0 0" rpy="0 -1.5708 0"/>
+  </joint>
+
+  <!-- 左指：铰链 (0.1655, +0.02)，绕 +z 转 -->
+  <link name="finger_left">
+    <visual>
+      <origin xyz="0.025 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.05 0.008 0.03"/></geometry>
+      <material name="finger_red"><color rgba="0.8 0.3 0.2 1"/></material>
+    </visual>
+    <!-- 碰撞体必须是 box：本环境 URDF->SDF 转换会丢弃 sphere/cylinder -->
+    <collision>
+      <origin xyz="0.025 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.05 0.008 0.03"/></geometry>
+    </collision>
+    <inertial>
+      <origin xyz="0.025 0 0" rpy="0 0 0"/>
+      <mass value="0.02"/>
+      <inertia ixx="6.0e-4" iyy="6.0e-4" izz="1.0e-3" ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </link>
+  <joint name="finger_left_joint" type="revolute">
+    <parent link="gripper_base"/>
+    <child link="finger_left"/>
+    <origin xyz="0.145 0.023 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <dynamics damping="0.01" friction="0.01"/>
+    <limit lower="-0.3" upper="0.5" effort="0.5" velocity="2.0"/>
+  </joint>
+
+  <!-- 右指：铰链 (0.1655, -0.02)，绕 +z 转（指令取反即对称开合） -->
+  <link name="finger_right">
+    <visual>
+      <origin xyz="0.025 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.05 0.008 0.03"/></geometry>
+      <material name="finger_red"><color rgba="0.8 0.3 0.2 1"/></material>
+    </visual>
+    <!-- 碰撞体必须是 box：本环境 URDF->SDF 转换会丢弃 sphere/cylinder -->
+    <collision>
+      <origin xyz="0.025 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.05 0.008 0.03"/></geometry>
+    </collision>
+    <inertial>
+      <origin xyz="0.025 0 0" rpy="0 0 0"/>
+      <mass value="0.02"/>
+      <inertia ixx="6.0e-4" iyy="6.0e-4" izz="1.0e-3" ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </link>
+  <joint name="finger_right_joint" type="revolute">
+    <parent link="gripper_base"/>
+    <child link="finger_right"/>
+    <origin xyz="0.145 -0.023 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <dynamics damping="0.01" friction="0.01"/>
+    <limit lower="-0.5" upper="0.3" effort="0.5" velocity="2.0"/>
+  </joint>
+
+  <!-- TCP 不再建实体 link：零质量的 gripper_tcp 会让 ODE 的 LCP
+       矩阵非正定（报 "LCP internal error, s<=0"）进而发散成 NaN。
+       TCP 偏移 0.2155 直接在程序里用 TCP_OFF 数值计算 -->
+
+  <!-- 与官方模型一致：末端负载也关闭重力。
+       否则夹爪(0.37kg)+相机自重会把机械臂整个拽塌，
+       塌到 joint3=pi 超出限位(±2.617)，一动就被限位约束撕出 NaN -->
+  <gazebo reference="gripper_base"><gravity>false</gravity></gazebo>
+  <gazebo reference="finger_left"><gravity>false</gravity></gazebo>
+  <gazebo reference="finger_right"><gravity>false</gravity></gazebo>
+  <gazebo reference="camera_link"><gravity>false</gravity></gazebo>
+
+  <!-- 指尖高摩擦，模拟柔性爪的橡胶指面，便于真正夹住 -->
+  <gazebo reference="finger_left">
+    <mu1>1.5</mu1><mu2>1.5</mu2>
+    <kp>2000.0</kp><kd>10.0</kd>
+    <maxVel>0.03</maxVel><minDepth>0.0005</minDepth>
+    <implicit_spring_damper>true</implicit_spring_damper>
+  </gazebo>
+  <gazebo reference="finger_right">
+    <mu1>1.5</mu1><mu2>1.5</mu2>
+    <kp>2000.0</kp><kd>10.0</kd>
+    <maxVel>0.03</maxVel><minDepth>0.0005</minDepth>
+    <implicit_spring_damper>true</implicit_spring_damper>
+  </gazebo>
+
+  <!-- ===========================================================
+       ③ 腕部相机（Eye-in-Hand）对齐 Intel RealSense 四目深度相机
+          外形 90 x 25 x 25 mm；640x480、HFOV 69°、近裁剪 0.02m
+          安装（对齐真机）：贴在 Link6 法兰旁，不伸到夹爪中段
+            · 90mm 长边沿 Link6 y 横跨（与两指开合方向平行）
+            · 厚 25mm 位于 +x 侧 x≈0.0575~0.0825，避开 63x63 夹爪本体
+            · 沿工具轴仅占 z≈0.019~0.051（紧贴法兰面）
+          视角：光轴（camera_link +x，Gazebo 相机约定）朝 Link6 +z，
+            并向夹爪轴线内倾约 16°。
+            ⚠️ 内倾不能更大：从 x=0.055 内倾 19° 时，光轴在夹爪末端
+            z=0.145 处 x=0.0171 < 本体半宽 0.0315，光轴穿过夹爪本体，
+            实测导致感知中心偏 x+25mm/y-38mm、下降撞箱。
+            现取 x=0.070、内倾 16°：z=0.145 处 x=0.0385（越过本体），
+            z=0.195 处光轴 x=0.0241，爪尖仍落在 69° 视野内。
+          四目沿长边一字排开：IR-L / RGB / IR-R / 结构光投射
+          近裁剪 0.28m 会把 0.195m 处的爪尖切掉，故改为 0.02m
+       =========================================================== -->
+  <link name="camera_link">
+    <visual>
+      <geometry><box size="0.025 0.09 0.025"/></geometry>
+      <material name="cam_blue"><color rgba="0.1 0.2 0.8 1"/></material>
+    </visual>
+    <!-- 四目：沿 90mm 长边(y)一字排开，镜头凸出在光轴(+x)方向 -->
+    <visual>
+      <origin xyz="0.0145 -0.03 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.006" length="0.007"/></geometry>
+      <material name="lens_ir_l"><color rgba="0.25 0.05 0.05 1"/></material>
+    </visual>
+    <visual>
+      <origin xyz="0.0145 -0.01 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.006" length="0.007"/></geometry>
+      <material name="lens_rgb"><color rgba="0.05 0.05 0.05 1"/></material>
+    </visual>
+    <visual>
+      <origin xyz="0.0145 0.01 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.006" length="0.007"/></geometry>
+      <material name="lens_ir_r"><color rgba="0.25 0.05 0.05 1"/></material>
+    </visual>
+    <visual>
+      <origin xyz="0.0145 0.03 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.006" length="0.007"/></geometry>
+      <material name="lens_proj"><color rgba="0.30 0.30 0.05 1"/></material>
+    </visual>
+    <inertial>
+      <mass value="0.05"/>
+      <inertia ixx="1e-4" iyy="2e-4" izz="2e-4" ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </link>
+  <joint name="camera_joint" type="fixed">
+    <parent link="Link6"/>
+    <child link="camera_link"/>
+    <!-- 法兰旁：+x 侧 70mm、工具轴 z=35mm；光轴(+x)朝 Link6 +z 内倾 16°
+         外移是为了让光轴绕过 63x63 夹爪本体（否则视野被本体遮挡） -->
+    <origin xyz="0.070 0 0.035" rpy="0 -1.2915 3.14159"/>
+  </joint>
+
+  <gazebo reference="camera_link">
+    <sensor type="depth" name="wrist_depth_camera">
+      <update_rate>15</update_rate>
+      <camera>
+        <horizontal_fov>1.204</horizontal_fov>
+        <image><width>320</width><height>240</height><format>R8G8B8</format></image>
+        <clip><near>0.02</near><far>3.0</far></clip>
+      </camera>
+      <plugin name="wrist_camera_plugin" filename="libgazebo_ros_camera.so">
+        <frame_name>camera_link</frame_name>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- gazebo_grasp_fix：本环境 ros2_control 的 position 接口是运动学置位
+       （瞬间把关节挪到目标角、力矩上限无效），手指无法产生持续摩擦力，
+       方块必滑。用这个插件在夹住后生成固定关节，并把手指-方块碰撞禁用，
+       从根上消除"刚性手指 + 不可穿透"的过约束。 -->
+  <gazebo>
+    <plugin name="gazebo_grasp_fix" filename="libgazebo_grasp_fix.so">
+      <arm>
+        <arm_name>rm_eco65_gripper</arm_name>
+        <palm_link>Link6</palm_link>
+        <gripper_link>finger_left</gripper_link>
+        <gripper_link>finger_right</gripper_link>
+      </arm>
+      <forces_angle_tolerance>120</forces_angle_tolerance>
+      <update_rate>4</update_rate>
+      <grip_count_threshold>2</grip_count_threshold>
+      <max_grip_count>8</max_grip_count>
+      <release_tolerance>0.005</release_tolerance>
+      <disable_collisions_on_attach>false</disable_collisions_on_attach>
+      <contact_topic>__default_topic__</contact_topic>
+    </plugin>
+  </gazebo>
+</robot>

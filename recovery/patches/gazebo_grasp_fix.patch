@@ -1,0 +1,233 @@
+diff --git a/gazebo_grasp_plugin/src/GazeboGraspFix.cpp b/gazebo_grasp_plugin/src/GazeboGraspFix.cpp
+index 9b3d8a6..803e90e 100644
+--- a/gazebo_grasp_plugin/src/GazeboGraspFix.cpp
++++ b/gazebo_grasp_plugin/src/GazeboGraspFix.cpp
+@@ -9,6 +9,8 @@
+ #include <gazebo_version_helpers/GazeboVersionHelpers.h>
+ 
+ #include <msgs/grasp_event.pb.h>
++#include <fstream>  // MARKER
++#define F "/tmp/graspfix_loaded.txt"
+ 
+ using gazebo::GazeboGraspFix;
+ using gazebo::GzVector3;
+@@ -77,6 +79,7 @@ void GazeboGraspFix::InitValues()
+ void GazeboGraspFix::Load(physics::ModelPtr _parent, sdf::ElementPtr _sdf)
+ {
+   gzmsg << "Loading grasp-fix plugin" << std::endl;
++  { std::ofstream mf("/tmp/graspfix_loaded.txt", std::ios::app); mf << "MARKER LOAD_START" << std::endl; }
+ 
+   // ++++++++++++ Read parameters and initialize fields  +++++++++++++++
+ 
+@@ -207,6 +210,7 @@ void GazeboGraspFix::Load(physics::ModelPtr _parent, sdf::ElementPtr _sdf)
+ 
+     std::string armName = armNameElem->Get<std::string>();
+     std::string palmName = handLinkElem->Get<std::string>();
++    { std::ofstream mf("/tmp/graspfix_loaded.txt", std::ios::app); mf << "MARKER PALM=" << palmName << std::endl; }
+ 
+     // collect all finger names:
+     std::vector<std::string> fingerLinkNames;
+@@ -228,11 +232,13 @@ void GazeboGraspFix::Load(physics::ModelPtr _parent, sdf::ElementPtr _sdf)
+     if (!gripper.Init(_parent, armName, palmName, fingerLinkNames,
+                       disableCollisionsOnAttach, _collisions))
+     {
++      { std::ofstream mf("/tmp/graspfix_loaded.txt", std::ios::app); mf << "MARKER INIT_FAIL arm=" << armName << std::endl; }
+       gzerr << "GazeboGraspFix: Could not initialize arm " << armName << ". Skipping."
+             << std::endl;
+       grippers.erase(armName);
+       continue;
+     }
++    { std::ofstream mf("/tmp/graspfix_loaded.txt", std::ios::app); mf << "MARKER INIT_OK arm=" << armName << std::endl; }
+     // add all the grippers's collision elements
+     for (std::map<std::string, physics::CollisionPtr>::iterator collIt =
+            _collisions.begin();
+@@ -263,6 +269,10 @@ void GazeboGraspFix::Load(physics::ModelPtr _parent, sdf::ElementPtr _sdf)
+     return;
+   }
+ 
++  { std::ofstream mf(F, std::ios::app);
++    mf << "MARKER FILTERCOLL_N=" << collisionNames.size() << std::endl;
++    for (size_t i = 0; i < collisionNames.size(); ++i)
++      mf << "MARKER FILTERCOLL " << collisionNames[i] << std::endl; }
+   // ++++++++++++ start up things +++++++++++++++
+ 
+   physics::PhysicsEnginePtr physics = GetPhysics(this->world);
+@@ -273,6 +283,9 @@ void GazeboGraspFix::Load(physics::ModelPtr _parent, sdf::ElementPtr _sdf)
+   filter_name = model->GetScopedName();
+   std::string topic = contactManager->CreateFilter(filter_name,
+                       collisionNames);
++  // NOTE: 本环境(Gazebo 11.11) CreateFilter 过滤器永远收不到接触，
++  //   改为直接订阅世界默认接触话题，由 OnContact 自己按夹爪碰撞名筛选。
++  topic = std::string("/gazebo/") + this->world->Name() + "/physics/contacts";
+   if (!this->contactSub)
+   {
+     gzmsg << "Subscribing contact manager to topic " << topic << std::endl;
+@@ -519,6 +532,8 @@ void GazeboGraspFix::OnUpdate()
+   // (and other useful information) for all the objects (so we have all forces on one object).
+   std::map<std::string, std::map<std::string, CollidingPoint> >::iterator objIt;
+   std::map<std::string, ObjectContactInfo> objectContactInfo;
++  // 每个物体被多少个【不同的夹爪 link】接触（几何判据用）
++  std::map<std::string, int> objLinkCount;
+ 
+   for (objIt = contPoints.begin(); objIt != contPoints.end(); ++objIt)
+   {
+@@ -537,6 +552,7 @@ void GazeboGraspFix::OnUpdate()
+       GzVector3 avgForce = collP.force / collP.sum;
+       // gzmsg << "Found collision with "<<linkName<<": "<<avgForce.x<<", "<<avgForce.y<<", "<<avgForce.z<<" (avg over "<<collP.sum<<")"<<std::endl;
+       objContInfo.appliedForces.push_back(avgForce);
++      objLinkCount[objName]++;
+       // insert the gripper (if it doesn't exist yet) and increase contact counter
+       int &gContactCnt = objContInfo.grippersInvolved[collP.gripperName];
+       gContactCnt++;
+@@ -549,6 +565,19 @@ void GazeboGraspFix::OnUpdate()
+     }
+   }
+ 
++  { static int uc=0; ++uc;
++    if (!objectContactInfo.empty() && (uc % 2 == 0)) {
++      std::ofstream mf(F, std::ios::app);
++      mf << "MARKER UPD objs=" << objectContactInfo.size();
++      for (auto &kv : objectContactInfo) {
++        mf << " | " << kv.first << " nf=" << kv.second.appliedForces.size();
++        for (size_t i=0; i<kv.second.appliedForces.size(); ++i) {
++          auto &f = kv.second.appliedForces[i];
++          mf << " (" << f.X() << "," << f.Y() << "," << f.Z() << ")";
++        }
++      }
++      mf << std::endl;
++    } }
+   // ++++++++++++++++++++ Handle Attachment  +++++++++++++++++++++++++++++++
+ 
+   // collect of all objects which are found to be "gripped" at the current stage.
+@@ -580,7 +609,16 @@ void GazeboGraspFix::OnUpdate()
+     // ------------------- 
+ 
+     float minAngleDiff = this->forcesAngleTolerance; //120 * M_PI/180;
+-    if (!CheckGrip(objContInfo.appliedForces, minAngleDiff, 0.3))
++    bool cg = CheckGrip(objContInfo.appliedForces, minAngleDiff, 0.3);
++    // 本版本 ODE 的接触力反馈不可靠（常有一个 link 的力恒为 0），
++    // 因此补充几何判据：两个不同的夹爪 link 同时接触物体 = 对捏成立
++    // （这正是力封闭的几何前提；真机有真实电流/力矩反馈则不需要这一条）
++    int nL = objLinkCount[objName];
++    bool geom = (nL >= 2);
++    { std::ofstream mf(F, std::ios::app); mf << "MARKER CHECKGRIP obj=" << objName
++        << " n=" << objContInfo.appliedForces.size() << " force_ok=" << cg
++        << " links=" << nL << " geom_ok=" << geom << std::endl; }
++    if (!cg && !geom)
+       continue;
+ 
+     // add to "gripped objects"
+@@ -633,6 +671,7 @@ void GazeboGraspFix::OnUpdate()
+ 
+     gzmsg << "GazeboGraspFix: Attaching " << objName << " to gripper " <<
+           graspingGripperName << "." << std::endl;
++    { std::ofstream mf(F, std::ios::app); mf << "MARKER ATTACH obj=" << objName << std::endl; }
+ 
+     // Store the array of contact poses which played part in the grip, sorted by colliding link.
+     // Filter out all link names of other grippers, otherwise if the other gripper moves
+@@ -814,6 +853,11 @@ void GazeboGraspFix::OnUpdate()
+ ////////////////////////////////////////////////////////////////////////////////
+ void GazeboGraspFix::OnContact(const ConstContactsPtr &_msg)
+ {
++  { static int cc=0; static int cz=0; ++cz;
++    if (_msg->contact_size() > 0 && (++cc % 10 == 0)) { std::ofstream mf(F, std::ios::app);
++      mf << "MARKER ONCONTACT hits=" << cc << " total=" << cz << " n=" << _msg->contact_size() << std::endl; }
++    if (cz % 20000 == 0) { std::ofstream mf(F, std::ios::app);
++      mf << "MARKER ALIVE total=" << cz << " hits=" << cc << std::endl; } }
+   //gzmsg<<"CONTACT! "<<std::endl;//<<_contact<<std::endl;
+   // for all contacts...
+   for (int i = 0; i < _msg->contact_size(); ++i)
+@@ -825,6 +869,19 @@ void GazeboGraspFix::OnContact(const ConstContactsPtr &_msg)
+       boost::dynamic_pointer_cast<physics::Collision>(
+         gazebo::GetEntityByName(this->world, _msg->contact(i).collision2()));
+ 
++    if (!collision1 || !collision2)
++    {
++      static int mA=0; if (++mA<=3) { std::ofstream mf(F, std::ios::app);
++        mf << "MARKER REJ_A 实体查找失败 c1=" << _msg->contact(i).collision1()
++           << " c2=" << _msg->contact(i).collision2() << std::endl; }
++      continue;
++    }
++    if (collision1->IsStatic() || collision2->IsStatic())
++    {
++      static int mB=0; if (++mB<=3) { std::ofstream mf(F, std::ios::app);
++        mf << "MARKER REJ_B 静态体" << std::endl; }
++      continue;
++    }
+     if ((collision1 && !collision1->IsStatic()) && (collision2
+         && !collision2->IsStatic()))
+     {
+@@ -839,6 +896,10 @@ void GazeboGraspFix::OnContact(const ConstContactsPtr &_msg)
+           (count != _msg->contact(i).wrench_size()) ||
+           (count != _msg->contact(i).depth_size()))
+       {
++        static int mS=0; if (++mS<=5) { std::ofstream mf(F, std::ios::app);
++          mf << "MARKER SIZES pos=" << count << " nrm=" << _msg->contact(i).normal_size()
++             << " wr=" << _msg->contact(i).wrench_size()
++             << " dep=" << _msg->contact(i).depth_size() << std::endl; }
+         gzerr << "GazeboGraspFix: Contact message has invalid array sizes\n" <<
+               std::endl;
+         continue;
+@@ -853,6 +914,8 @@ void GazeboGraspFix::OnContact(const ConstContactsPtr &_msg)
+ 
+       if (contact.count < 1)
+       {
++        static int mC=0; if (++mC<=3) { std::ofstream mf(F, std::ios::app);
++          mf << "MARKER REJ_C count=0 " << name1 << " / " << name2 << std::endl; }
+         std::cerr << "ERROR: GazeboGraspFix: Not enough forces given for contact of ."
+                   << name1 << " / " << name2 << std::endl;
+         continue;
+@@ -874,7 +937,15 @@ void GazeboGraspFix::OnContact(const ConstContactsPtr &_msg)
+         objCollision = collision1;
+         gripperOfCollidingLink = gripperCollIt->second;
+         for (int k = 0; k < contact.count; ++k)
+-          force.push_back(contact.wrench[k].body1Force);
++        {
++          GzVector3 f1 = contact.wrench[k].body1Force;
++          GzVector3 f2 = contact.wrench[k].body2Force;
++          // 本环境 ODE 只填充了 f1/f2 中的一个；按牛顿第三定律取有值的一方
++          force.push_back(gazebo::GetLength(f1) >= gazebo::GetLength(f2) ? f1 : -f2);
++          if (k == 0) { static int mF=0; if (++mF<=6) { std::ofstream mf(F, std::ios::app);
++            mf << "MARKER RAW objIsBody1=1 f1=(" << f1.X() << "," << f1.Y() << "," << f1.Z()
++               << ") f2=(" << f2.X() << "," << f2.Y() << "," << f2.Z() << ")" << std::endl; } }
++        }
+       }
+       else if ((gripperCollIt = this->collisions.find(name1)) !=
+                this->collisions.end())
+@@ -886,8 +957,22 @@ void GazeboGraspFix::OnContact(const ConstContactsPtr &_msg)
+         objCollision = collision2;
+         gripperOfCollidingLink = gripperCollIt->second;
+         for (int k = 0; k < contact.count; ++k)
+-          force.push_back(contact.wrench[k].body2Force);
++        {
++          GzVector3 f1 = contact.wrench[k].body1Force;
++          GzVector3 f2 = contact.wrench[k].body2Force;
++          force.push_back(gazebo::GetLength(f2) >= gazebo::GetLength(f1) ? f2 : -f1);
++          if (k == 0) { static int mG=0; if (++mG<=6) { std::ofstream mf(F, std::ios::app);
++            mf << "MARKER RAW objIsBody1=0 f1=(" << f1.X() << "," << f1.Y() << "," << f1.Z()
++               << ") f2=(" << f2.X() << "," << f2.Y() << "," << f2.Z() << ")" << std::endl; } }
++        }
++      }
++      else
++      {
++        static int mD=0; if (++mD<=3) { std::ofstream mf(F, std::ios::app);
++          mf << "MARKER REJ_D 非夹爪接触  n1=" << name1 << "  n2=" << name2 << std::endl; }
++        continue;
+       }
++      if (force.empty()) continue;
+ 
+       GzVector3 avgForce;
+       // compute average/sum of the forces applied on the object
+diff --git a/gazebo_grasp_plugin/src/GazeboGraspGripper.cpp b/gazebo_grasp_plugin/src/GazeboGraspGripper.cpp
+index aef2079..ed62c28 100644
+--- a/gazebo_grasp_plugin/src/GazeboGraspGripper.cpp
++++ b/gazebo_grasp_plugin/src/GazeboGraspGripper.cpp
+@@ -78,7 +78,7 @@ bool GazeboGraspGripper::Init(physics::ModelPtr &_model,
+             std::endl;
+       continue;
+     }
+-    for (unsigned int j = 0; j < link->GetChildCount(); ++j)
++    for (unsigned int j = 0; j < link->GetCollisions().size(); ++j)
+     {
+       physics::CollisionPtr collision = link->GetCollision(j);
+       std::string collName = collision->GetScopedName();

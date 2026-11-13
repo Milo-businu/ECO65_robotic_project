@@ -1,0 +1,54 @@
+# =====================================================================
+# ECO65 机械臂项目 —— 别名与快捷命令（由 cloud2_eco65_robot/restore.sh 写入）
+# 写入位置：~/.bash_aliases（被 ~/.bashrc 自动 source，隔离友好）
+#
+# 设计约定（踩坑踩出来的）：
+#   - ROS 底层 /opt/ros/foxy 在此全局 source（无害，所有 ROS 终端都需要）
+#   - 工作空间 ~/robot_vla_ws/install/setup.bash 绝不写进全局 .bashrc
+#     （会 overlay 污染其它 ROS 工作空间），改用 alias sb 按需 source
+# =====================================================================
+
+# ROS 底层（所有终端都要）
+source /opt/ros/foxy/setup.bash
+
+# 工作空间按需 source
+alias sb='source ~/robot_vla_ws/install/setup.bash'
+alias ws='cd ~/robot_vla_ws'
+
+# 常用 ls 别名
+alias ll='ls -alF'
+alias la='ls -A'
+alias l='ls -CF'
+
+# 仿真与控制
+alias sim='ros2 launch rm_gazebo gazebo_eco65_6fb_demo.launch.py'
+alias killgaz='killall -9 gzserver gzclient'
+alias js='ros2 topic echo /joint_states'
+alias tfe='ros2 run tf2_ros tf2_echo baselink Link6'
+
+# 运动学自检
+alias fk='python3 ~/robot_vla_ws/src/arm_control/arm_control/scripts/fk_check.py'
+alias ik='python3 ~/robot_vla_ws/src/arm_control/arm_control/scripts/ik_check.py'
+alias model='python3 ~/robot_vla_ws/src/arm_calibration/scripts/check_model.py'
+
+# PID 调试
+alias pidlab='python3 ~/robot_vla_ws/src/arm_control/scripts/pid_lab.py'
+alias pidtrack='python3 ~/robot_vla_ws/src/arm_control/scripts/pid_track.py'
+
+# URDF 生成（每次开机/重编译后先跑一次，生成 /tmp/eco65_6fb.urdf）
+alias urdf='xacro ~/robot_vla_ws/src/ros2_rm_robot/rm_description/urdf/rm_eco65.urdf link6_type:=Link6_6fb > /tmp/eco65_6fb.urdf'
+
+# 相机 / 感知
+alias simcam='sb && xvfb-run -a -s "-screen 0 1280x1024x24" ros2 launch ~/robot_vla_ws/src/arm_perception/launch/camera_demo.launch.py'
+alias box='ros2 run gazebo_ros spawn_entity.py -file ~/robot_vla_ws/models/target_box/model.sdf -entity target_box'
+alias camtopic='ros2 topic list | grep wrist_depth'
+alias seegreen='python3 ~/robot_vla_ws/src/arm_perception/scripts/see_green.py'
+alias camwhere='python3 ~/robot_vla_ws/src/arm_perception/scripts/camera_where.py'
+alias posesearch='python3 ~/robot_vla_ws/src/arm_perception/scripts/pose_search_green.py'
+alias boxloc='python3 ~/robot_vla_ws/src/arm_perception/scripts/box_localize.py'
+
+# VLA 推理服务（务必在 conda openpi 环境里跑）
+alias vlasrv='cd ~/openpi && MALLOC_CONF=background_thread:false ARROW_DEFAULT_MEMORY_POOL=system ~/miniconda3/envs/openpi/bin/python -u vla_server.py'
+
+# ROS 与 VLA(Python3.11) 严格隔离：清掉 ROS 的 PYTHONPATH，避免 rclpy 撞 cpython-311
+export PYTHONPATH=/opt/ros/foxy/lib/python3.8/site-packages:/usr/lib/python3/dist-packages
