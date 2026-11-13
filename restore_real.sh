@@ -44,7 +44,7 @@ if [ -f /etc/os-release ]; then
     esac
 fi
 if [ ! -d /opt/ros/foxy ]; then
-    echo "     ❌ /opt/ros/foxy 不存在。先按 26 号手册装 ROS2 Foxy。"
+    echo "     ❌ /opt/ros/foxy 不存在。先按 README装 ROS2 Foxy。"
     exit 1
 fi
 echo "     ✅ /opt/ros/foxy 存在"
@@ -128,7 +128,7 @@ if [ -n "$MISSING" ]; then
         echo "        python3 $PKG/scripts/preflight.py                  # 离线自检"
         echo "        python3 $PKG/scripts/grasp_task.py                 # dry-run 演练"
         echo "        ros2 launch $PKG/launch/real_grasp.launch.py      # 用绝对路径起整机"
-        echo "        依赖包编译问题按 26 号手册排查（缺 rosidl / libapi_cpp.so 等）。"
+        echo "        依赖包编译问题按 README排查（缺 rosidl / libapi_cpp.so 等）。"
         echo "        修好后重跑本脚本即可（每一步都可重复跑）。"
         exit 1
     fi
@@ -158,7 +158,7 @@ echo "============================================================"
 echo " 软件侧准备完成 ✅"
 echo "============================================================"
 echo
-echo "接下来的顺序（详见 30 号手册）："
+echo "接下来的顺序（详见 README）："
 echo "  1) python3 $PKG/scripts/calibrate_gripper.py --demo   # 先看懂标定怎么玩"
 echo "     python3 $PKG/scripts/calibrate_gripper.py --port /dev/motor_serial"
 echo "  2) 按 25 号清单做手眼标定 → 把 4x4 矩阵填进 config/real_params.yaml"

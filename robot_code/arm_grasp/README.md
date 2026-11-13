@@ -104,7 +104,7 @@ python3 robot_code/arm_grasp/scripts/perception_mode.py brain --target "green cu
 两种模式只差"哪几个像素是目标"：color 用颜色阈值，brain 用 Qwen2.5-VL 给 bbox；
 后面的对齐深度、手眼、IK、夹持、放置**完全同一套**。
 brain 掉线会自动退回 color（`fallback_to_color: true`）。
-详细操作见 **35 号手册**（`docs/机械臂整机开发文档/35_感知两种模式操作手册_color与brain.md`）。
+详细操作见 **README**（`README.md`）。
 
 > 现场对准阈值：`tune_perception.py --color green --write-config`
 > 窗口里按 `s` 会**直接写进** `real_params.yaml` 的 `color_thresholds`（自动备份）。
@@ -187,7 +187,7 @@ place:
 
 `preflight.py` 会自动检查放置点可达性、路径连续性、限位余量——
 IK 无解会直接 ❌（实测 `xy=[0.32,-0.20]` 时 z 上限约 0.20m，别把 `retreat_height_m` 设太大）。
-详见 30 号手册 **10.1 节**。
+详见 README 第 11 步。
 
 ### ⚠️ 编译顺序：`arm_grasp` 之前必须先编三个 C++ 包
 
@@ -278,7 +278,6 @@ profile:
 
 ## 完整手册
 
-- `docs/机械臂整机开发文档/30_云服务器到真机一键移植手册.md` —— 照着做就能跑通
-- `docs/机械臂整机开发文档/32_真机与云机双机Git协作流程.md` —— 双机改代码 / 提交 / 合并的流程与报错速查
+- `README.md` —— 12 步全流程，照着做就能跑通
+- `SECURITY.md` —— 安全边界、默认值说明与加固建议
 
-（30 / 32 号在 work1 根目录也各放了一份）

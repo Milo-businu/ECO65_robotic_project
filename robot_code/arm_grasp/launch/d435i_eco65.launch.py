@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """D435i 腕装（Eye-in-Hand）启动文件 —— 从 real_params.yaml 读配置，不再硬编码
 
-和旧模板（机械臂整机开发文档/realsense_d435i/）的两点不同：
+和通用 realsense 启动模板的两点不同：
   ① 序列号 / 话题前缀 / 手眼结果全部从 config/real_params.yaml 读，
      改配置即可，不用改 launch 文件
   ② 相机话题前缀由 camera.prefix【自动反推】camera_namespace，

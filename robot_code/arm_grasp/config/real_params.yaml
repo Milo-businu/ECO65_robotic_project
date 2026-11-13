@@ -189,7 +189,7 @@ perception:
 
 # ---------------- 夹爪 MS42DC ----------------
 gripper:
-  port: /dev/motor_serial       # 26 号手册的 udev 固定名；没有就填 /dev/ttyUSB0
+  port: /dev/motor_serial       # README的 udev 固定名；没有就填 /dev/ttyUSB0
   baud: 115200                  # USB 串口固定，不可改
   addr: 1
   microstep: 0x20               # 32 细分

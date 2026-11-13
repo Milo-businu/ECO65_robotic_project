@@ -31,7 +31,7 @@ if [ -f /opt/ros/foxy/setup.bash ]; then
     # shellcheck disable=SC1091
     source /opt/ros/foxy/setup.bash
 else
-    echo "❌ /opt/ros/foxy 不存在：先装 ROS2 Foxy（26 号手册）"
+    echo "❌ /opt/ros/foxy 不存在：先装 ROS2 Foxy（README）"
     exit 1
 fi
 if [ -f "$WS/install/local_setup.bash" ]; then

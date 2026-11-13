@@ -56,7 +56,7 @@ def setup_import_paths(cfg: dict) -> str:
             return d
     raise ImportError(
         "找不到 arm_control/scripts/ik_check.py（正/逆运动学库）。"
-        "确认已按 30 号手册把仓库放到 ~/robot_vla_ws/")
+        "确认已按 README把仓库放到 ~/robot_vla_ws/")
 
 
 def find_urdf(cfg: dict) -> str:

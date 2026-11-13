@@ -115,7 +115,7 @@ rtl()   { ( _rsrc && ros2 topic list | grep -E "d435i|grasp|gripper|rm_driver" )
 rctl()  { ( _rsrc && ros2 control list_controllers ); }
 
 # =====================================================================
-# 七、清僵尸（三个历史高频，见 38 号问题册）
+# 七、清僵尸（三个历史高频，见 README 附 B）
 # =====================================================================
 alias kcam='pkill -9 -f "[r]ealsense2_camera_node"; echo "已清相机占用（RS2_USB_STATUS_BUSY 的解法）"'
 alias krsp='pkill -9 -f "[/]robot_state_publisher/robot_state_publisher"; echo "已清 RSP（comm 截断 15 字符，别用 pkill -x）"'

@@ -325,7 +325,7 @@ def _summary():
         print("\n接硬件前要补的（不是错误，是流程步骤）：")
         for m in WARN:
             print("  ⚠️  %s" % m)
-    print("\n下一步（30 号手册第 5 步）：")
+    print("\n下一步（README第 5 步）：")
     print("  0. python3 net_autoconf.py        # 先把 arm_ip/udp_ip 配对好（/joint_states 没数就是它）")
     print("  1. udev 固定夹爪串口 + 拨码 2 号 ON")
     print("  2. 跑 calibrate_gripper.py --verify 再正式标定开口")
